@@ -7,3 +7,7 @@ venv/
 *.json.key
 service-account*.json
 .env
+
+# Datos generados localmente (Faker, pruebas)
+data/
+local_orders/
