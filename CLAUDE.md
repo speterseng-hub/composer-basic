@@ -4,7 +4,7 @@
 
 Pipeline de datos end-to-end para procesar órdenes de e-commerce en GCP.
 Los eventos de órdenes se generan con Faker (o llegan desde Pub/Sub), se almacenan como JSON crudo en GCS,
-se transforman con Apache Beam (Dataflow), se cargan a BigQuery y se reportan por email diariamente.
+se transforman a Parquet con un PythonOperator, se cargan a BigQuery y se reportan por email diariamente.
 
 ## Arquitectura
 
@@ -15,8 +15,7 @@ Pub/Sub / Faker
   GCS raw/          ← JSONs de órdenes crudas
       │
       ▼
-  Dataflow          ← dataflow/transform_job.py
-  (Beam pipeline)
+  Transformación    ← dag_2_transform (PythonOperator: pandas + pyarrow)
       │
       ▼
   GCS processed/    ← Parquet particionado por fecha
@@ -33,10 +32,10 @@ Pub/Sub / Faker
 | DAG | Trigger | Responsabilidad |
 |-----|---------|-----------------|
 | `dag_1_ingesta` | Diario 06:00 UTC | Sensor GCS → genera datos si no hay → mueve a GCS raw/ |
-| `dag_2_transform` | Diario 07:00 UTC | Lanza job Dataflow → espera finalización → valida row count |
-| `dag_3_bq_load` | Diario 08:00 UTC | Carga Parquet de GCS processed/ → BigQuery |
-| `dag_4_metricas` | Diario 09:00 UTC | Corre SQL de métricas → guarda en Airflow Variables |
-| `dag_5_reporte` | Diario 10:00 UTC | Lee métricas → formatea HTML → envía email |
+| `dag_2_transform` | Disparado por dag_1 | Lee JSONs de raw/ → valida y separa en orders/order_items → escribe Parquet en processed/ → valida row count |
+| `dag_3_bq_load` | Disparado por dag_2 | Carga orders.parquet y order_items.parquet de GCS processed/ → BigQuery |
+| `dag_4_metricas` | Disparado por dag_3 | Corre SQL de métricas → inserta en daily_metrics → guarda en Variable `daily_metrics_latest` |
+| `dag_5_reporte` | Disparado por dag_4 | Lee `daily_metrics_latest` → formatea HTML → envía email |
 
 ## Estructura de carpetas
 
@@ -53,8 +52,6 @@ composer/
 │   ├── dag_3_bq_load.py
 │   ├── dag_4_metricas.py
 │   └── dag_5_reporte.py
-├── dataflow/
-│   └── transform_job.py       ← pipeline Apache Beam
 ├── scripts/
 │   └── generate_fake_orders.py ← generador de datos con Faker
 ├── sql/
@@ -63,7 +60,7 @@ composer/
 │   ├── schema_daily_metrics.json
 │   └── metricas_diarias.sql
 └── tests/
-    ├── test_transform.py       ← unit tests del pipeline Beam
+    ├── test_transform.py       ← unit tests de la transformación de órdenes
     └── test_dag_structure.py   ← tests de estructura de DAGs
 ```
 
@@ -86,10 +83,10 @@ Estas variables deben existir en Airflow antes de ejecutar los DAGs:
 | `gcp_project_id` | ID del proyecto GCP | `mi-proyecto-gcp` |
 | `gcs_bucket` | Bucket principal | `ecommerce-pipeline-bucket` |
 | `bq_dataset` | Dataset de BigQuery | `ecommerce_dw` |
-| `dataflow_region` | Región para Dataflow | `us-central1` |
-| `dataflow_template_path` | Path GCS del template Beam | `gs://bucket/templates/transform` |
 | `report_email_list` | Emails destinatarios (JSON list) | `["ops@empresa.com"]` |
 | `alert_email` | Email para alertas de fallo | `ops@empresa.com` |
+| `min_processed_rows` | Mínimo de filas esperadas en `processed/` para que dag_2_transform valide OK | `1` |
+| `fake_orders_count` | Cantidad de órdenes a generar en dag_1_ingesta si no hay datos en `incoming/` | `100` |
 
 ## Variables de entorno requeridas (para desarrollo local)
 
@@ -97,7 +94,6 @@ Estas variables deben existir en Airflow antes de ejecutar los DAGs:
 GCP_PROJECT_ID=mi-proyecto-gcp
 GCS_BUCKET=ecommerce-pipeline-bucket
 BQ_DATASET=ecommerce_dw
-DATAFLOW_REGION=us-central1
 GOOGLE_APPLICATION_CREDENTIALS=/ruta/a/service-account.json
 ```
 
@@ -113,14 +109,6 @@ python scripts/generate_fake_orders.py --local --count 100 --output-dir /tmp/ord
 python scripts/generate_fake_orders.py --count 100
 ```
 
-### Pipeline Beam (modo local DirectRunner)
-```bash
-python dataflow/transform_job.py \
-  --runner=DirectRunner \
-  --input-path=gs://BUCKET/raw/ \
-  --output-path=gs://BUCKET/processed/
-```
-
 ### Tests
 ```bash
 pytest tests/ -v
@@ -128,8 +116,8 @@ pytest tests/ -v
 
 ## Dependencias clave
 
-- `apache-airflow-providers-google>=10.0.0` — operadores GCS, BQ, Dataflow
-- `apache-beam[gcp]>=2.55.0` — pipeline de transformación
+- `apache-airflow-providers-google>=10.0.0` — operadores GCS, BQ
+- `pandas>=2.0.0` — transformación de órdenes
 - `faker>=20.0.0` — generación de datos sintéticos
 - `pyarrow>=14.0.0` — escritura de Parquet
 - `google-cloud-pubsub>=2.18.0` — publicación de eventos

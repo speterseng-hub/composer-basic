@@ -11,3 +11,7 @@ service-account*.json
 # Datos generados localmente (Faker, pruebas)
 data/
 local_orders/
+
+# Volúmenes locales de docker compose (Airflow)
+logs/
+plugins/

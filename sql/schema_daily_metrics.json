@@ -1,0 +1,10 @@
+[
+  {"name": "fecha", "type": "DATE", "mode": "REQUIRED"},
+  {"name": "total_orders", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "total_revenue", "type": "FLOAT", "mode": "REQUIRED"},
+  {"name": "avg_order_value", "type": "FLOAT", "mode": "REQUIRED"},
+  {"name": "orders_pending", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "orders_shipped", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "orders_delivered", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "orders_cancelled", "type": "INTEGER", "mode": "REQUIRED"}
+]

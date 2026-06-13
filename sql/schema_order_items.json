@@ -1,0 +1,8 @@
+[
+  {"name": "order_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "product_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "nombre", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "cantidad", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "precio_unitario", "type": "FLOAT", "mode": "REQUIRED"},
+  {"name": "subtotal", "type": "FLOAT", "mode": "REQUIRED"}
+]

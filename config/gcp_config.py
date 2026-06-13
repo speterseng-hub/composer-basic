@@ -33,18 +33,16 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 GCS_BUCKET = os.getenv("GCS_BUCKET", "ecommerce-pipeline-bucket")
 
 # Prefijos de carpetas dentro del bucket
+GCS_INCOMING_PREFIX = "incoming/"       # Archivos nuevos pendientes de mover a raw/
 GCS_RAW_PREFIX = "raw/"                  # JSONs crudos de órdenes
 GCS_PROCESSED_PREFIX = "processed/"     # Parquet transformados
 GCS_REJECTED_PREFIX = "rejected/"       # Registros que fallaron validación
-GCS_TEMP_PREFIX = "temp/"               # Archivos temporales de Dataflow
-GCS_STAGING_PREFIX = "staging/"         # Staging de Dataflow
 
 # Paths completos (gs://...)
+GCS_INCOMING_PATH = f"gs://{GCS_BUCKET}/{GCS_INCOMING_PREFIX}"
 GCS_RAW_PATH = f"gs://{GCS_BUCKET}/{GCS_RAW_PREFIX}"
 GCS_PROCESSED_PATH = f"gs://{GCS_BUCKET}/{GCS_PROCESSED_PREFIX}"
 GCS_REJECTED_PATH = f"gs://{GCS_BUCKET}/{GCS_REJECTED_PREFIX}"
-GCS_TEMP_PATH = f"gs://{GCS_BUCKET}/{GCS_TEMP_PREFIX}"
-GCS_STAGING_PATH = f"gs://{GCS_BUCKET}/{GCS_STAGING_PREFIX}"
 
 # ---------------------------------------------------------------------------
 # BigQuery
@@ -65,31 +63,6 @@ BQ_TABLE_DAILY_METRICS_REF = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE_DAILY_MET
 
 # Ubicación geográfica del dataset
 BQ_LOCATION = os.getenv("BQ_LOCATION", "US")
-
-# ---------------------------------------------------------------------------
-# Dataflow
-# ---------------------------------------------------------------------------
-
-# Región donde se ejecutan los jobs de Dataflow
-DATAFLOW_REGION = os.getenv("DATAFLOW_REGION", "us-central1")
-
-# Path en GCS donde está el template compilado del pipeline Beam
-DATAFLOW_TEMPLATE_PATH = os.getenv(
-    "DATAFLOW_TEMPLATE_PATH",
-    f"gs://{GCS_BUCKET}/templates/transform_job"
-)
-
-# Número máximo de workers para los jobs de Dataflow
-DATAFLOW_MAX_WORKERS = int(os.getenv("DATAFLOW_MAX_WORKERS", "5"))
-
-# Tipo de máquina para los workers
-DATAFLOW_MACHINE_TYPE = os.getenv("DATAFLOW_MACHINE_TYPE", "n1-standard-2")
-
-# Cuenta de servicio que ejecuta Dataflow
-DATAFLOW_SERVICE_ACCOUNT = os.getenv(
-    "DATAFLOW_SERVICE_ACCOUNT",
-    f"dataflow-sa@{GCP_PROJECT_ID}.iam.gserviceaccount.com"
-)
 
 # ---------------------------------------------------------------------------
 # Pub/Sub
@@ -127,9 +100,6 @@ ORDER_STATUSES = ["pending", "shipped", "delivered", "cancelled"]
 # Número de registros que genera el script Faker por defecto
 DEFAULT_ORDER_COUNT = int(os.getenv("DEFAULT_ORDER_COUNT", "50000"))
 
-# Umbral mínimo de registros válidos en Beam (porcentaje, 0-100)
-# Si la tasa de rechazo supera este umbral, el job falla
+# Umbral mínimo de registros válidos (porcentaje, 0-100)
+# Si la tasa de rechazo supera este umbral, la transformación falla
 MIN_VALID_RECORDS_PCT = float(os.getenv("MIN_VALID_RECORDS_PCT", "95.0"))
-
-# Nombre del job de Dataflow (se le agrega timestamp en el DAG)
-DATAFLOW_JOB_NAME_PREFIX = "ecommerce-transform"

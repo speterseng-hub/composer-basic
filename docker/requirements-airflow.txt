@@ -1,0 +1,6 @@
+# Dependencias adicionales sobre la imagen base apache/airflow:3.2.2
+# Solo lo necesario para que los DAGs importen correctamente.
+apache-airflow-providers-google==22.1.0
+apache-airflow-providers-apache-beam==6.2.3
+Faker==40.22.0
+pyarrow>=14.0.0
