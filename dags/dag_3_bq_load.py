@@ -18,6 +18,7 @@ import sys
 from airflow import DAG
 from airflow.models import Variable
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -109,4 +110,36 @@ with DAG(
         """,
     )
 
-    [load_orders_to_bq, load_order_items_to_bq] >> trigger_dag_4_metricas
+    delete_order_items = BigQueryInsertJobOperator(
+        task_id="delete_order_items",
+        configuration={
+            "query": {
+                "query": f"DELETE FROM `{BQ_TABLE_ORDER_ITEMS_REF}` WHERE order_id IN (SELECT order_id FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}')",
+                "useLegacySql": False,
+            }
+        },
+        location=BQ_LOCATION,
+        doc_md="""
+        ### Borrar order_items existentes
+        Elimina los items de órdenes de `ds - 1 día` antes de cargar,
+        para garantizar idempotencia en re-ejecuciones.
+        """,
+    )
+
+    delete_orders = BigQueryInsertJobOperator(
+        task_id="delete_orders",
+        configuration={
+            "query": {
+                "query": f"DELETE FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
+                "useLegacySql": False,
+            }
+        },
+        location=BQ_LOCATION,
+        doc_md="""
+        ### Borrar orders existentes
+        Elimina las órdenes de `ds - 1 día` antes de cargar,
+        para garantizar idempotencia en re-ejecuciones.
+        """,
+    )
+
+    delete_order_items >> delete_orders >> [load_orders_to_bq, load_order_items_to_bq] >> trigger_dag_4_metricas

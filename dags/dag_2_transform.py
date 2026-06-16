@@ -87,11 +87,11 @@ def _transformar_ordenes(**context) -> None:
 
     archivos = [
         obj for obj in hook.list(bucket_name=bucket, prefix=GCS_RAW_PREFIX)
-        if obj.endswith(".json")
+        if obj.endswith(".jsonl")
     ]
 
     if not archivos:
-        raise AirflowException(f"No se encontraron archivos JSON en 'gs://{bucket}/{GCS_RAW_PREFIX}'.")
+        raise AirflowException(f"No se encontraron archivos JSONL en 'gs://{bucket}/{GCS_RAW_PREFIX}'.")
 
     filas_orders = []
     filas_items = []
@@ -100,39 +100,45 @@ def _transformar_ordenes(**context) -> None:
 
     for objeto in archivos:
         contenido = hook.download(bucket_name=bucket, object_name=objeto)
-        orden = json.loads(contenido)
-        total += 1
+        if isinstance(contenido, bytes):
+            contenido = contenido.decode("utf-8")
 
-        if not _orden_es_valida(orden):
-            rechazadas += 1
-            hook.upload(
-                bucket_name=bucket,
-                object_name=f"{GCS_REJECTED_PREFIX}{fecha}/{os.path.basename(objeto)}",
-                data=contenido,
-                mime_type="application/json",
-            )
-            continue
+        for linea in contenido.strip().splitlines():
+            if not linea.strip():
+                continue
+            orden = json.loads(linea)
+            total += 1
 
-        total_amount = sum(item["cantidad"] * item["precio_unitario"] for item in orden["items"])
-        filas_orders.append({
-            "order_id": orden["order_id"],
-            "customer_id": orden["customer_id"],
-            "fecha": orden["fecha"],
-            "estado": orden["estado"],
-            "ciudad": orden["ciudad"],
-            "pais": orden["pais"],
-            "total_amount": total_amount,
-        })
+            if not _orden_es_valida(orden):
+                rechazadas += 1
+                hook.upload(
+                    bucket_name=bucket,
+                    object_name=f"{GCS_REJECTED_PREFIX}{fecha}/{orden['order_id']}.json",
+                    data=json.dumps(orden, ensure_ascii=False),
+                    mime_type="application/json",
+                )
+                continue
 
-        for item in orden["items"]:
-            filas_items.append({
+            total_amount = sum(item["cantidad"] * item["precio_unitario"] for item in orden["items"])
+            filas_orders.append({
                 "order_id": orden["order_id"],
-                "product_id": item["product_id"],
-                "nombre": item["nombre"],
-                "cantidad": item["cantidad"],
-                "precio_unitario": item["precio_unitario"],
-                "subtotal": item["cantidad"] * item["precio_unitario"],
+                "customer_id": orden["customer_id"],
+                "fecha": orden["fecha"],
+                "estado": orden["estado"],
+                "ciudad": orden["ciudad"],
+                "pais": orden["pais"],
+                "total_amount": total_amount,
             })
+
+            for item in orden["items"]:
+                filas_items.append({
+                    "order_id": orden["order_id"],
+                    "product_id": item["product_id"],
+                    "nombre": item["nombre"],
+                    "cantidad": item["cantidad"],
+                    "precio_unitario": item["precio_unitario"],
+                    "subtotal": item["cantidad"] * item["precio_unitario"],
+                })
 
     pct_validas = 100.0 * (total - rechazadas) / total
     print(f"Órdenes procesadas: {total}, rechazadas: {rechazadas} ({100 - pct_validas:.2f}%).")

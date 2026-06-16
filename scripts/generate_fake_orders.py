@@ -115,23 +115,24 @@ def generar_orden() -> dict:
 
 
 def guardar_local(ordenes: list, output_dir: str) -> None:
-    """Guarda cada orden como un archivo JSON individual en output_dir."""
+    """Guarda todas las órdenes como un único archivo JSONL en output_dir."""
     try:
         os.makedirs(output_dir, exist_ok=True)
     except OSError as e:
         print(f"Error creando el directorio de salida '{output_dir}': {e}")
         sys.exit(1)
 
-    for orden in ordenes:
-        ruta_archivo = os.path.join(output_dir, f"order_{orden['order_id']}.json")
-        try:
-            with open(ruta_archivo, "w", encoding="utf-8") as f:
-                json.dump(orden, f, ensure_ascii=False, indent=2)
-        except OSError as e:
-            print(f"Error escribiendo el archivo '{ruta_archivo}': {e}")
-            continue
+    fecha = ordenes[0]["fecha"][:10] if ordenes else datetime.now().strftime("%Y-%m-%d")
+    ruta_archivo = os.path.join(output_dir, f"orders_{fecha}.jsonl")
+    try:
+        with open(ruta_archivo, "w", encoding="utf-8") as f:
+            for orden in ordenes:
+                f.write(json.dumps(orden, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"Error escribiendo el archivo '{ruta_archivo}': {e}")
+        sys.exit(1)
 
-    print(f"Se guardaron {len(ordenes)} órdenes en '{output_dir}'.")
+    print(f"Se guardaron {len(ordenes)} órdenes en '{ruta_archivo}'.")
 
 
 def publicar_pubsub(ordenes: list, topic_path: str) -> None:

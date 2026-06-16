@@ -63,29 +63,25 @@ def _decide_data_source(**context) -> str:
 
 def _generar_y_subir_ordenes(**context) -> None:
     """
-    Genera órdenes sintéticas con Faker y las sube como archivos JSON
-    individuales a `raw/` en GCS.
+    Genera órdenes sintéticas con Faker y las sube como un único archivo
+    JSONL a `raw/` en GCS (una orden por línea).
     """
     bucket = Variable.get("gcs_bucket")
     count = int(Variable.get("fake_orders_count", default_var=DEFAULT_ORDER_COUNT))
     hook = GCSHook(gcp_conn_id="google_cloud_default")
+    ds = context["ds"]
 
-    subidas = 0
-    for _ in range(count):
-        orden = generar_orden()
-        nombre_archivo = f"{GCS_RAW_PREFIX}order_{orden['order_id']}.json"
-        try:
-            hook.upload(
-                bucket_name=bucket,
-                object_name=nombre_archivo,
-                data=json.dumps(orden, ensure_ascii=False),
-                mime_type="application/json",
-            )
-            subidas += 1
-        except Exception as e:
-            print(f"Error subiendo la orden '{orden['order_id']}': {e}")
+    ordenes = [generar_orden() for _ in range(count)]
+    jsonl = "\n".join(json.dumps(o, ensure_ascii=False) for o in ordenes)
+    nombre_archivo = f"{GCS_RAW_PREFIX}orders_{ds}.jsonl"
 
-    print(f"Se generaron y subieron {subidas} órdenes a 'gs://{bucket}/{GCS_RAW_PREFIX}'.")
+    hook.upload(
+        bucket_name=bucket,
+        object_name=nombre_archivo,
+        data=jsonl,
+        mime_type="application/jsonlines",
+    )
+    print(f"Se generaron y subieron {count} órdenes en 'gs://{bucket}/{nombre_archivo}'.")
 
 
 with DAG(
