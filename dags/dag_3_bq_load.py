@@ -110,36 +110,24 @@ with DAG(
         """,
     )
 
-    delete_order_items = BigQueryInsertJobOperator(
-        task_id="delete_order_items",
+    delete_existing_orders = BigQueryInsertJobOperator(
+        task_id="delete_existing_orders",
         configuration={
             "query": {
-                "query": f"DELETE FROM `{BQ_TABLE_ORDER_ITEMS_REF}` WHERE order_id IN (SELECT order_id FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}')",
+                "query": (
+                    f"DELETE FROM `{BQ_TABLE_ORDER_ITEMS_REF}` "
+                    f"WHERE order_id IN (SELECT order_id FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}');\n"
+                    f"DELETE FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}';"
+                ),
                 "useLegacySql": False,
             }
         },
         location=BQ_LOCATION,
         doc_md="""
-        ### Borrar order_items existentes
-        Elimina los items de órdenes de `ds - 1 día` antes de cargar,
-        para garantizar idempotencia en re-ejecuciones.
+        ### Borrar órdenes existentes
+        Elimina en un único job de BQ las filas de `order_items` y `orders`
+        para `ds - 1 día`, garantizando idempotencia en re-ejecuciones.
         """,
     )
 
-    delete_orders = BigQueryInsertJobOperator(
-        task_id="delete_orders",
-        configuration={
-            "query": {
-                "query": f"DELETE FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
-                "useLegacySql": False,
-            }
-        },
-        location=BQ_LOCATION,
-        doc_md="""
-        ### Borrar orders existentes
-        Elimina las órdenes de `ds - 1 día` antes de cargar,
-        para garantizar idempotencia en re-ejecuciones.
-        """,
-    )
-
-    delete_order_items >> delete_orders >> [load_orders_to_bq, load_order_items_to_bq] >> trigger_dag_4_metricas
+    delete_existing_orders >> [load_orders_to_bq, load_order_items_to_bq] >> trigger_dag_4_metricas
