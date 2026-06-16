@@ -144,11 +144,12 @@ def _transformar_ordenes(**context) -> None:
         )
 
     orders_df = pd.DataFrame(filas_orders)
+    orders_df["fecha"] = pd.to_datetime(orders_df["fecha"])
     items_df = pd.DataFrame(filas_items)
 
     for nombre_archivo, df in (("orders.parquet", orders_df), ("order_items.parquet", items_df)):
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
-            pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp.name)
+            pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp.name, coerce_timestamps="us")
             tmp_path = tmp.name
 
         try:

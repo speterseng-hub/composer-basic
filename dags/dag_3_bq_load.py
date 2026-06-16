@@ -24,10 +24,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config.gcp_config import (  # noqa: E402
     BQ_LOCATION,
-    BQ_TABLE_ORDER_ITEMS_REF,
-    BQ_TABLE_ORDERS_REF,
+    BQ_TABLE_ORDER_ITEMS,
+    BQ_TABLE_ORDERS,
     GCS_PROCESSED_PREFIX,
 )
+
+# projectId y dataset se leen de las Variables de Airflow (no de env vars),
+# para que coincidan con el bucket y demás configuración del pipeline.
+BQ_TABLE_ORDERS_REF = f"{Variable.get('gcp_project_id')}.{Variable.get('bq_dataset')}.{BQ_TABLE_ORDERS}"
+BQ_TABLE_ORDER_ITEMS_REF = f"{Variable.get('gcp_project_id')}.{Variable.get('bq_dataset')}.{BQ_TABLE_ORDER_ITEMS}"
 
 default_args = {
     "owner": "data-eng",

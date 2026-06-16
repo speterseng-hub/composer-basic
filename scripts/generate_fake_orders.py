@@ -34,7 +34,7 @@ import os
 import random
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from faker import Faker
 
@@ -99,10 +99,14 @@ def generar_orden() -> dict:
     estados = list(ESTADO_WEIGHTS.keys())
     pesos = list(ESTADO_WEIGHTS.values())
 
+    ayer = (datetime.now() - timedelta(days=1)).date()
+    inicio_ayer = datetime.combine(ayer, datetime.min.time())
+    fin_ayer = datetime.combine(ayer, datetime.max.time())
+
     return {
         "order_id": str(uuid.uuid4()),
         "customer_id": f"CUST-{random.randint(1, 50000):06d}",
-        "fecha": fake.date_time_between(start_date="-30d", end_date="now").isoformat(),
+        "fecha": fake.date_time_between_dates(datetime_start=inicio_ayer, datetime_end=fin_ayer).isoformat(),
         "estado": random.choices(estados, weights=pesos, k=1)[0],
         "items": generar_items(),
         "ciudad": fake.city(),

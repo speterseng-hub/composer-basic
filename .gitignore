@@ -5,6 +5,7 @@ venv/
 *.egg-info/
 .pytest_cache/
 *.json.key
+credentials/
 service-account*.json
 .env
 

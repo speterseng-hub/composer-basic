@@ -1,7 +1,7 @@
 [
   {"name": "order_id", "type": "STRING", "mode": "REQUIRED"},
   {"name": "customer_id", "type": "STRING", "mode": "REQUIRED"},
-  {"name": "fecha", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "fecha", "type": "TIMESTAMP", "mode": "REQUIRED"},
   {"name": "estado", "type": "STRING", "mode": "REQUIRED"},
   {"name": "ciudad", "type": "STRING", "mode": "NULLABLE"},
   {"name": "pais", "type": "STRING", "mode": "NULLABLE"},

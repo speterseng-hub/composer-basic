@@ -14,7 +14,7 @@ import json
 
 from airflow import DAG
 from airflow.models import Variable
-from airflow.providers.standard.operators.email import EmailOperator
+from airflow.providers.smtp.operators.smtp import EmailOperator
 from airflow.providers.standard.operators.python import PythonOperator
 
 default_args = {

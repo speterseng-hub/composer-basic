@@ -6,7 +6,8 @@ DAG de métricas diarias del pipeline de e-commerce.
 No tiene schedule propio: es disparado por `dag_3_bq_load`
 (`trigger_dag_4_metricas`) una vez cargadas las tablas `orders` y
 `order_items`. Ejecuta `sql/metricas_diarias.sql` sobre `orders` para
-`{{ ds }}`, inserta el resultado en `daily_metrics`, guarda esas métricas en
+`{{ ds }} - 1 día` (las órdenes generadas por `dag_1_ingesta` llevan fecha de
+"ayer"), inserta el resultado en `daily_metrics`, guarda esas métricas en
 la Variable `daily_metrics_latest` y dispara `dag_5_reporte`.
 """
 
@@ -25,13 +26,17 @@ from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobO
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config.gcp_config import (  # noqa: E402
-    BQ_DATASET,
     BQ_LOCATION,
     BQ_TABLE_DAILY_METRICS,
-    BQ_TABLE_DAILY_METRICS_REF,
-    BQ_TABLE_ORDERS_REF,
-    GCP_PROJECT_ID,
+    BQ_TABLE_ORDERS,
 )
+
+# projectId y dataset se leen de las Variables de Airflow (no de env vars),
+# para que coincidan con el bucket y demás configuración del pipeline.
+GCP_PROJECT_ID = Variable.get("gcp_project_id")
+BQ_DATASET = Variable.get("bq_dataset")
+BQ_TABLE_ORDERS_REF = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE_ORDERS}"
+BQ_TABLE_DAILY_METRICS_REF = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE_DAILY_METRICS}"
 
 default_args = {
     "owner": "data-eng",
@@ -50,19 +55,16 @@ with open(os.path.join(SQL_DIR, "metricas_diarias.sql"), encoding="utf-8") as f:
 
 def _guardar_metricas_en_variable(**context) -> None:
     """
-    Consulta la fila de `daily_metrics` correspondiente a `{{ ds }}` y la
-    guarda como JSON en la Variable `daily_metrics_latest`, para que
-    `dag_5_reporte` la lea sin volver a consultar BigQuery.
+    Consulta la fila de `daily_metrics` correspondiente a `{{ ds }} - 1 día`
+    (la misma fecha usada por `run_metrics_query`) y la guarda como JSON en
+    la Variable `daily_metrics_latest`, para que `dag_5_reporte` la lea sin
+    volver a consultar BigQuery.
     """
-    fecha = context["ds"]
+    fecha = context["macros"].ds_add(context["ds"], -1)
     hook = BigQueryHook(gcp_conn_id="google_cloud_default", use_legacy_sql=False)
 
-    query = f"SELECT * FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE fecha = @fecha"
-    df = hook.get_pandas_df(
-        sql=query,
-        parameters=[{"name": "fecha", "parameterType": {"type": "DATE"}, "parameterValue": {"value": fecha}}],
-        dialect="standard",
-    )
+    query = f"SELECT * FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{fecha}'"
+    df = hook.get_pandas_df(sql=query, dialect="standard")
 
     if df.empty:
         raise ValueError(f"No se encontraron métricas en '{BQ_TABLE_DAILY_METRICS_REF}' para '{fecha}'.")
@@ -86,6 +88,22 @@ with DAG(
     doc_md=__doc__,
 ) as dag:
 
+    delete_existing_metrics = BigQueryInsertJobOperator(
+        task_id="delete_existing_metrics",
+        configuration={
+            "query": {
+                "query": f"DELETE FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
+                "useLegacySql": False,
+            }
+        },
+        location=BQ_LOCATION,
+        doc_md="""
+        ### Borrar métricas existentes
+        Elimina la fila de `daily_metrics` para `{{ ds }} - 1 día` antes de
+        insertar, evitando duplicados si el DAG se re-ejecuta.
+        """,
+    )
+
     run_metrics_query = BigQueryInsertJobOperator(
         task_id="run_metrics_query",
         configuration={
@@ -100,7 +118,7 @@ with DAG(
                 "writeDisposition": "WRITE_APPEND",
                 "createDisposition": "CREATE_IF_NEEDED",
                 "queryParameters": [
-                    {"name": "fecha", "parameterType": {"type": "DATE"}, "parameterValue": {"value": "{{ ds }}"}},
+                    {"name": "fecha", "parameterType": {"type": "DATE"}, "parameterValue": {"value": "{{ macros.ds_add(ds, -1) }}"}},
                 ],
             }
         },
@@ -108,8 +126,9 @@ with DAG(
         location=BQ_LOCATION,
         doc_md="""
         ### Calcular métricas diarias
-        Ejecuta `sql/metricas_diarias.sql` sobre `orders` para `{{ ds }}` e
-        inserta el resultado (append) en `daily_metrics`.
+        Ejecuta `sql/metricas_diarias.sql` sobre `orders` para
+        `{{ ds }} - 1 día` (fecha de las órdenes generadas por
+        `dag_1_ingesta`) e inserta el resultado (append) en `daily_metrics`.
         """,
     )
 
@@ -133,4 +152,4 @@ with DAG(
         """,
     )
 
-    run_metrics_query >> save_metrics_to_variable >> trigger_dag_5_reporte
+    delete_existing_metrics >> run_metrics_query >> save_metrics_to_variable >> trigger_dag_5_reporte
