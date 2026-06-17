@@ -16,3 +16,7 @@ local_orders/
 # Volúmenes locales de docker compose (Airflow)
 logs/
 plugins/
+
+# Claude Code
+CLAUDE.md
+.claude/
