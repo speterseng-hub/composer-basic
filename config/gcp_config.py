@@ -22,9 +22,6 @@ GCP_REGION = os.getenv("GCP_REGION", "us-central1")
 # Zona dentro de la región (usada por algunos recursos de Dataflow)
 GCP_ZONE = os.getenv("GCP_ZONE", "us-central1-a")
 
-# Ruta al archivo de credenciales de la cuenta de servicio (solo desarrollo local)
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-
 # ---------------------------------------------------------------------------
 # Google Cloud Storage
 # ---------------------------------------------------------------------------
