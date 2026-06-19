@@ -40,7 +40,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": [Variable.get("alert_email", default_var="speterseng@gmail.com")],
+    "email": ["{{ var.value.alert_email }}"],
 }
 
 

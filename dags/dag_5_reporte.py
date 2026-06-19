@@ -23,7 +23,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": [Variable.get("alert_email", default_var="speterseng@gmail.com")],
+    "email": ["{{ var.value.alert_email }}"],
 }
 
 
@@ -31,8 +31,11 @@ def _formatear_reporte(**context) -> str:
     """
     Lee la Variable `daily_metrics_latest` y devuelve un HTML simple con las
     métricas diarias, para ser enviado por `send_report_email`.
+    También empuja la lista de destinatarios a XCom para `send_report_email`.
     """
     metricas = json.loads(Variable.get("daily_metrics_latest"))
+    email_list = json.loads(Variable.get("report_email_list", default_var='["ops@empresa.com"]'))
+    context["ti"].xcom_push(key="email_list", value=email_list)
 
     return f"""
     <h2>Reporte diario de órdenes - {metricas['fecha']}</h2>
@@ -72,7 +75,7 @@ with DAG(
 
     send_report_email = EmailOperator(
         task_id="send_report_email",
-        to=json.loads(Variable.get("report_email_list", default_var='["ops@empresa.com"]')),
+        to="{{ ti.xcom_pull(task_ids='format_report', key='email_list') }}",
         subject="Reporte diario de órdenes - {{ ds }}",
         html_content="{{ ti.xcom_pull(task_ids='format_report') }}",
         doc_md="""

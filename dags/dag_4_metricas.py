@@ -31,20 +31,13 @@ from config.gcp_config import (  # noqa: E402
     BQ_TABLE_ORDERS,
 )
 
-# projectId y dataset se leen de las Variables de Airflow (no de env vars),
-# para que coincidan con el bucket y demás configuración del pipeline.
-GCP_PROJECT_ID = Variable.get("gcp_project_id")
-BQ_DATASET = Variable.get("bq_dataset")
-BQ_TABLE_ORDERS_REF = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE_ORDERS}"
-BQ_TABLE_DAILY_METRICS_REF = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE_DAILY_METRICS}"
-
 default_args = {
     "owner": "data-eng",
     "depends_on_past": False,
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": [Variable.get("alert_email", default_var="speterseng@gmail.com")],
+    "email": ["{{ var.value.alert_email }}"],
 }
 
 SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "sql")
@@ -61,13 +54,16 @@ def _guardar_metricas_en_variable(**context) -> None:
     volver a consultar BigQuery.
     """
     fecha = context["macros"].ds_add(context["ds"], -1)
+    project_id = Variable.get("gcp_project_id")
+    dataset = Variable.get("bq_dataset")
+    table_ref = f"{project_id}.{dataset}.{BQ_TABLE_DAILY_METRICS}"
     hook = BigQueryHook(gcp_conn_id="google_cloud_default", use_legacy_sql=False)
 
-    query = f"SELECT * FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{fecha}'"
+    query = f"SELECT * FROM `{table_ref}` WHERE DATE(fecha) = '{fecha}'"
     df = hook.get_pandas_df(sql=query, dialect="standard")
 
     if df.empty:
-        raise ValueError(f"No se encontraron métricas en '{BQ_TABLE_DAILY_METRICS_REF}' para '{fecha}'.")
+        raise ValueError(f"No se encontraron métricas en '{table_ref}' para '{fecha}'.")
 
     metricas = df.iloc[0].to_dict()
     metricas["fecha"] = str(metricas["fecha"])
@@ -92,7 +88,7 @@ with DAG(
         task_id="delete_existing_metrics",
         configuration={
             "query": {
-                "query": f"DELETE FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
+                "query": f"DELETE FROM `{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_DAILY_METRICS}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
                 "useLegacySql": False,
             }
         },
@@ -111,8 +107,8 @@ with DAG(
                 "query": SQL_METRICAS_DIARIAS,
                 "useLegacySql": False,
                 "destinationTable": {
-                    "projectId": GCP_PROJECT_ID,
-                    "datasetId": BQ_DATASET,
+                    "projectId": "{{ var.value.gcp_project_id }}",
+                    "datasetId": "{{ var.value.bq_dataset }}",
                     "tableId": BQ_TABLE_DAILY_METRICS,
                 },
                 "writeDisposition": "WRITE_APPEND",
@@ -122,7 +118,7 @@ with DAG(
                 ],
             }
         },
-        params={"orders_table": BQ_TABLE_ORDERS_REF},
+        params={"orders_table": f"{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDERS}"},
         location=BQ_LOCATION,
         doc_md="""
         ### Calcular métricas diarias

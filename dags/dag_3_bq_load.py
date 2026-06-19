@@ -16,7 +16,6 @@ import os
 import sys
 
 from airflow import DAG
-from airflow.models import Variable
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
@@ -30,18 +29,13 @@ from config.gcp_config import (  # noqa: E402
     GCS_PROCESSED_PREFIX,
 )
 
-# projectId y dataset se leen de las Variables de Airflow (no de env vars),
-# para que coincidan con el bucket y demás configuración del pipeline.
-BQ_TABLE_ORDERS_REF = f"{Variable.get('gcp_project_id')}.{Variable.get('bq_dataset')}.{BQ_TABLE_ORDERS}"
-BQ_TABLE_ORDER_ITEMS_REF = f"{Variable.get('gcp_project_id')}.{Variable.get('bq_dataset')}.{BQ_TABLE_ORDER_ITEMS}"
-
 default_args = {
     "owner": "data-eng",
     "depends_on_past": False,
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": [Variable.get("alert_email", default_var="speterseng@gmail.com")],
+    "email": ["{{ var.value.alert_email }}"],
 }
 
 SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "sql")
@@ -69,7 +63,7 @@ with DAG(
         task_id="load_orders_to_bq",
         bucket="{{ var.value.gcs_bucket }}",
         source_objects=[f"{GCS_PROCESSED_PREFIX}{{{{ ds }}}}/orders.parquet"],
-        destination_project_dataset_table=BQ_TABLE_ORDERS_REF,
+        destination_project_dataset_table=f"{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDERS}",
         source_format="PARQUET",
         schema_fields=SCHEMA_ORDERS,
         write_disposition="WRITE_APPEND",
@@ -86,7 +80,7 @@ with DAG(
         task_id="load_order_items_to_bq",
         bucket="{{ var.value.gcs_bucket }}",
         source_objects=[f"{GCS_PROCESSED_PREFIX}{{{{ ds }}}}/order_items.parquet"],
-        destination_project_dataset_table=BQ_TABLE_ORDER_ITEMS_REF,
+        destination_project_dataset_table=f"{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDER_ITEMS}",
         source_format="PARQUET",
         schema_fields=SCHEMA_ORDER_ITEMS,
         write_disposition="WRITE_APPEND",
@@ -115,9 +109,9 @@ with DAG(
         configuration={
             "query": {
                 "query": (
-                    f"DELETE FROM `{BQ_TABLE_ORDER_ITEMS_REF}` "
-                    f"WHERE order_id IN (SELECT order_id FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}');\n"
-                    f"DELETE FROM `{BQ_TABLE_ORDERS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}';"
+                    f"DELETE FROM `{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDER_ITEMS}` "
+                    f"WHERE order_id IN (SELECT order_id FROM `{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDERS}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}');\n"
+                    f"DELETE FROM `{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDERS}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}';"
                 ),
                 "useLegacySql": False,
             }

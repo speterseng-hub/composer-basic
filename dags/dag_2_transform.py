@@ -45,7 +45,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": [Variable.get("alert_email", default_var="speterseng@gmail.com")],
+    "email": ["{{ var.value.alert_email }}"],
 }
 
 
@@ -85,13 +85,16 @@ def _transformar_ordenes(**context) -> None:
     fecha = context["ds"]
     hook = GCSHook(gcp_conn_id="google_cloud_default")
 
+    archivo_esperado = f"{GCS_RAW_PREFIX}orders_{fecha}.jsonl"
     archivos = [
-        obj for obj in hook.list(bucket_name=bucket, prefix=GCS_RAW_PREFIX)
-        if obj.endswith(".jsonl")
+        obj for obj in hook.list(bucket_name=bucket, prefix=archivo_esperado)
+        if obj == archivo_esperado
     ]
 
     if not archivos:
-        raise AirflowException(f"No se encontraron archivos JSONL en 'gs://{bucket}/{GCS_RAW_PREFIX}'.")
+        raise AirflowException(
+            f"No se encontró el archivo JSONL de la ejecución: 'gs://{bucket}/{archivo_esperado}'."
+        )
 
     filas_orders = []
     filas_items = []
@@ -106,14 +109,21 @@ def _transformar_ordenes(**context) -> None:
         for linea in contenido.strip().splitlines():
             if not linea.strip():
                 continue
-            orden = json.loads(linea)
             total += 1
+
+            try:
+                orden = json.loads(linea)
+            except json.JSONDecodeError as e:
+                rechazadas += 1
+                print(f"Línea {total} ignorada por JSON inválido: {e}")
+                continue
 
             if not _orden_es_valida(orden):
                 rechazadas += 1
+                rejected_id = orden.get("order_id", f"unknown_{total}")
                 hook.upload(
                     bucket_name=bucket,
-                    object_name=f"{GCS_REJECTED_PREFIX}{fecha}/{orden['order_id']}.json",
+                    object_name=f"{GCS_REJECTED_PREFIX}{fecha}/{rejected_id}.json",
                     data=json.dumps(orden, ensure_ascii=False),
                     mime_type="application/json",
                 )
@@ -139,6 +149,11 @@ def _transformar_ordenes(**context) -> None:
                     "precio_unitario": item["precio_unitario"],
                     "subtotal": item["cantidad"] * item["precio_unitario"],
                 })
+
+    if total == 0:
+        raise AirflowException(
+            f"El archivo 'gs://{bucket}/{archivo_esperado}' no contiene líneas válidas."
+        )
 
     pct_validas = 100.0 * (total - rechazadas) / total
     print(f"Órdenes procesadas: {total}, rechazadas: {rechazadas} ({100 - pct_validas:.2f}%).")
