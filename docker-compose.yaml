@@ -35,6 +35,11 @@ x-airflow-common:
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/credentials/service-account.json
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    GCS_BUCKET: ${GCS_BUCKET}
+    BQ_DATASET: ${BQ_DATASET}
+    ALERT_EMAIL: ${ALERT_EMAIL}
+    REPORT_EMAIL_LIST: ${REPORT_EMAIL_LIST}
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs

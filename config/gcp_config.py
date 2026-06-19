@@ -14,7 +14,7 @@ import os
 # ---------------------------------------------------------------------------
 
 # ID del proyecto en Google Cloud Platform
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "mi-proyecto-gcp")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "composer-project-498921")
 
 # Región principal para los servicios (Dataflow, Composer)
 GCP_REGION = os.getenv("GCP_REGION", "us-central1")
@@ -30,7 +30,7 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 # ---------------------------------------------------------------------------
 
 # Bucket principal del proyecto
-GCS_BUCKET = os.getenv("GCS_BUCKET", "ecommerce-pipeline-bucket")
+GCS_BUCKET = os.getenv("GCS_BUCKET", "composer-project-498921-ecommerce")
 
 # Prefijos de carpetas dentro del bucket
 GCS_INCOMING_PREFIX = "incoming/"       # Archivos nuevos pendientes de mover a raw/
@@ -85,10 +85,10 @@ PUBSUB_SUBSCRIPTION = os.getenv("PUBSUB_SUBSCRIPTION", "ecommerce-orders-sub")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "pipeline@empresa.com")
 
 # Email de alertas operacionales (fallos de DAG)
-EMAIL_ALERT = os.getenv("EMAIL_ALERT", "ops@empresa.com")
+ALERT_EMAIL = os.getenv("ALERT_EMAIL", "s.peterseng@gmail.com")
 
 # Lista de destinatarios del reporte diario (separados por coma)
-EMAIL_REPORT_LIST = os.getenv("EMAIL_REPORT_LIST", "ops@empresa.com").split(",")
+REPORT_EMAIL_LIST = os.getenv("REPORT_EMAIL_LIST", "s.peterseng@gmail.com").split(",")
 
 # ---------------------------------------------------------------------------
 # Pipeline / negocio

@@ -31,6 +31,8 @@ from airflow.providers.google.cloud.hooks.gcs import GCSHook
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config.gcp_config import (  # noqa: E402
+    ALERT_EMAIL,
+    GCS_BUCKET,
     GCS_PROCESSED_PREFIX,
     GCS_RAW_PREFIX,
     GCS_REJECTED_PREFIX,
@@ -45,7 +47,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": ["{{ var.value.alert_email }}"],
+    "email": [ALERT_EMAIL],
 }
 
 
@@ -81,7 +83,7 @@ def _transformar_ordenes(**context) -> None:
     porcentaje de registros válidos cae por debajo de
     `MIN_VALID_RECORDS_PCT`.
     """
-    bucket = Variable.get("gcs_bucket")
+    bucket = GCS_BUCKET
     fecha = context["ds"]
     hook = GCSHook(gcp_conn_id="google_cloud_default")
 
@@ -189,8 +191,8 @@ def _validar_row_count(**context) -> None:
     y falla si el total es menor al mínimo configurado en la Variable
     `min_processed_rows`.
     """
-    bucket = Variable.get("gcs_bucket")
-    min_rows = int(Variable.get("min_processed_rows", default_var=1))
+    bucket = GCS_BUCKET
+    min_rows = int(Variable.get("min_processed_rows", default_var="1"))
     fecha = context["ds"]
     prefix = f"{GCS_PROCESSED_PREFIX}{fecha}/"
 

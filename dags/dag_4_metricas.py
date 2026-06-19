@@ -26,9 +26,13 @@ from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobO
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config.gcp_config import (  # noqa: E402
+    ALERT_EMAIL,
+    BQ_DATASET,
     BQ_LOCATION,
     BQ_TABLE_DAILY_METRICS,
-    BQ_TABLE_ORDERS,
+    BQ_TABLE_DAILY_METRICS_REF,
+    BQ_TABLE_ORDERS_REF,
+    GCP_PROJECT_ID,
 )
 
 default_args = {
@@ -37,7 +41,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": ["{{ var.value.alert_email }}"],
+    "email": [ALERT_EMAIL],
 }
 
 SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "sql")
@@ -54,16 +58,13 @@ def _guardar_metricas_en_variable(**context) -> None:
     volver a consultar BigQuery.
     """
     fecha = context["macros"].ds_add(context["ds"], -1)
-    project_id = Variable.get("gcp_project_id")
-    dataset = Variable.get("bq_dataset")
-    table_ref = f"{project_id}.{dataset}.{BQ_TABLE_DAILY_METRICS}"
     hook = BigQueryHook(gcp_conn_id="google_cloud_default", use_legacy_sql=False)
 
-    query = f"SELECT * FROM `{table_ref}` WHERE DATE(fecha) = '{fecha}'"
+    query = f"SELECT * FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{fecha}'"
     df = hook.get_pandas_df(sql=query, dialect="standard")
 
     if df.empty:
-        raise ValueError(f"No se encontraron métricas en '{table_ref}' para '{fecha}'.")
+        raise ValueError(f"No se encontraron métricas en '{BQ_TABLE_DAILY_METRICS_REF}' para '{fecha}'.")
 
     metricas = df.iloc[0].to_dict()
     metricas["fecha"] = str(metricas["fecha"])
@@ -88,7 +89,7 @@ with DAG(
         task_id="delete_existing_metrics",
         configuration={
             "query": {
-                "query": f"DELETE FROM `{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_DAILY_METRICS}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
+                "query": f"DELETE FROM `{BQ_TABLE_DAILY_METRICS_REF}` WHERE DATE(fecha) = '{{{{ macros.ds_add(ds, -1) }}}}'",
                 "useLegacySql": False,
             }
         },
@@ -107,8 +108,8 @@ with DAG(
                 "query": SQL_METRICAS_DIARIAS,
                 "useLegacySql": False,
                 "destinationTable": {
-                    "projectId": "{{ var.value.gcp_project_id }}",
-                    "datasetId": "{{ var.value.bq_dataset }}",
+                    "projectId": GCP_PROJECT_ID,
+                    "datasetId": BQ_DATASET,
                     "tableId": BQ_TABLE_DAILY_METRICS,
                 },
                 "writeDisposition": "WRITE_APPEND",
@@ -118,7 +119,7 @@ with DAG(
                 ],
             }
         },
-        params={"orders_table": f"{{{{ var.value.gcp_project_id }}}}.{{{{ var.value.bq_dataset }}}}.{BQ_TABLE_ORDERS}"},
+        params={"orders_table": BQ_TABLE_ORDERS_REF},
         location=BQ_LOCATION,
         doc_md="""
         ### Calcular métricas diarias

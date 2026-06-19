@@ -11,11 +11,17 @@ por email a los destinatarios de la Variable `report_email_list`.
 
 from datetime import datetime, timedelta
 import json
+import os
+import sys
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.providers.smtp.operators.smtp import EmailOperator
 from airflow.providers.standard.operators.python import PythonOperator
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from config.gcp_config import ALERT_EMAIL, REPORT_EMAIL_LIST  # noqa: E402
 
 default_args = {
     "owner": "data-eng",
@@ -23,7 +29,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": ["{{ var.value.alert_email }}"],
+    "email": [ALERT_EMAIL],
 }
 
 
@@ -31,11 +37,8 @@ def _formatear_reporte(**context) -> str:
     """
     Lee la Variable `daily_metrics_latest` y devuelve un HTML simple con las
     métricas diarias, para ser enviado por `send_report_email`.
-    También empuja la lista de destinatarios a XCom para `send_report_email`.
     """
     metricas = json.loads(Variable.get("daily_metrics_latest"))
-    email_list = json.loads(Variable.get("report_email_list", default_var='["ops@empresa.com"]'))
-    context["ti"].xcom_push(key="email_list", value=email_list)
 
     return f"""
     <h2>Reporte diario de órdenes - {metricas['fecha']}</h2>
@@ -75,7 +78,7 @@ with DAG(
 
     send_report_email = EmailOperator(
         task_id="send_report_email",
-        to="{{ ti.xcom_pull(task_ids='format_report', key='email_list') }}",
+        to=REPORT_EMAIL_LIST,
         subject="Reporte diario de órdenes - {{ ds }}",
         html_content="{{ ti.xcom_pull(task_ids='format_report') }}",
         doc_md="""

@@ -27,7 +27,9 @@ from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config.gcp_config import (  # noqa: E402
+    ALERT_EMAIL,
     DEFAULT_ORDER_COUNT,
+    GCS_BUCKET,
     GCS_INCOMING_PREFIX,
     GCS_RAW_PREFIX,
 )
@@ -40,7 +42,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": True,
-    "email": ["{{ var.value.alert_email }}"],
+    "email": [ALERT_EMAIL],
 }
 
 
@@ -49,7 +51,7 @@ def _decide_data_source(**context) -> str:
     Revisa si hay archivos nuevos en `incoming/`. Devuelve el task_id de la
     rama a ejecutar: mover los archivos existentes o generar datos falsos.
     """
-    bucket = Variable.get("gcs_bucket")
+    bucket = GCS_BUCKET
     hook = GCSHook(gcp_conn_id="google_cloud_default")
     archivos = hook.list(bucket_name=bucket, prefix=GCS_INCOMING_PREFIX)
     # El propio prefijo puede listarse como un objeto "carpeta" vacío
@@ -66,8 +68,8 @@ def _generar_y_subir_ordenes(**context) -> None:
     Genera órdenes sintéticas con Faker y las sube como un único archivo
     JSONL a `raw/` en GCS (una orden por línea).
     """
-    bucket = Variable.get("gcs_bucket")
-    count = int(Variable.get("fake_orders_count", default_var=DEFAULT_ORDER_COUNT))
+    bucket = GCS_BUCKET
+    count = int(Variable.get("fake_orders_count", default_var=str(DEFAULT_ORDER_COUNT)))
     hook = GCSHook(gcp_conn_id="google_cloud_default")
     ds = context["ds"]
 
@@ -109,9 +111,9 @@ with DAG(
 
     move_incoming_to_raw = GCSToGCSOperator(
         task_id="move_incoming_to_raw",
-        source_bucket="{{ var.value.gcs_bucket }}",
+        source_bucket=GCS_BUCKET,
         source_object=f"{GCS_INCOMING_PREFIX}*",
-        destination_bucket="{{ var.value.gcs_bucket }}",
+        destination_bucket=GCS_BUCKET,
         destination_object=GCS_RAW_PREFIX,
         move_object=True,
         doc_md="""
